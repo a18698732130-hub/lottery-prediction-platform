@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  lottery-app:
+    build: .
+    container_name: lottery-prediction-platform
+    ports:
+      - "8501:8501"
+    volumes:
+      # Persist the data directory (database, csv history)
+      - ./data:/app/data
+    restart: always
+    environment:
+      - TZ=Asia/Shanghai
