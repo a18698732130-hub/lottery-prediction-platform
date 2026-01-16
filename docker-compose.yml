@@ -12,6 +12,7 @@ services:
     restart: always
     environment:
       - TZ=Asia/Shanghai
+      - PYTHONUNBUFFERED=1
 
   lottery-scheduler:
     build: .
@@ -22,3 +23,4 @@ services:
     restart: always
     environment:
       - TZ=Asia/Shanghai
+      - PYTHONUNBUFFERED=1
