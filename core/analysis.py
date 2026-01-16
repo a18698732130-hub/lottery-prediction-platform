@@ -35,8 +35,94 @@ def calculate_omission(df: pd.DataFrame, max_num: int, prefix: str = 'red') -> d
         
     return omission_counts
 
-def calculate_sum(numbers: list) -> int:
-    return sum(numbers)
+def calculate_metrics(numbers: list, max_val: int):
+    """
+    Calculate various metrics for a set of numbers (reds).
+    """
+    # 012 Road
+    road_0 = len([n for n in numbers if n % 3 == 0])
+    road_1 = len([n for n in numbers if n % 3 == 1])
+    road_2 = len([n for n in numbers if n % 3 == 2])
+    
+    # Big/Small (Midpoint approx max_val/2)
+    mid = max_val // 2
+    small = len([n for n in numbers if n <= mid])
+    big = len([n for n in numbers if n > mid])
+    
+    # Odd/Even
+    odd = len([n for n in numbers if n % 2 != 0])
+    even = len([n for n in numbers if n % 2 == 0])
+    
+    # Prime/Composite (Basic primes up to 35)
+    primes = {1, 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31}
+    prime_cnt = len([n for n in numbers if n in primes])
+    composite_cnt = len(numbers) - prime_cnt
+    
+    # Span
+    span = max(numbers) - min(numbers)
+    
+    # Sum
+    sum_val = sum(numbers)
+    
+    return {
+        "012": (road_0, road_1, road_2),
+        "big_small": (big, small),
+        "odd_even": (odd, even),
+        "prime_composite": (prime_cnt, composite_cnt),
+        "span": span,
+        "sum": sum_val
+    }
+
+class AnalysisUtils:
+    @staticmethod
+    def analyze_recent_trends(history_df: pd.DataFrame, game_type: GameType, lookback: int = 30):
+        """
+        Analyze recent trends to determine hot patterns.
+        """
+        config = get_config(game_type)
+        recent = history_df.tail(lookback)
+        
+        red_cols = [c for c in recent.columns if 'red' in c]
+        
+        trends = {
+            "avg_sum": 0,
+            "hot_road": None, # 0, 1, or 2
+            "hot_odd_even": None, # 'odd' or 'even'
+            "avg_span": 0
+        }
+        
+        sums = []
+        spans = []
+        road_counts = [0, 0, 0]
+        odd_counts = 0
+        even_counts = 0
+        
+        for _, row in recent.iterrows():
+            reds = [int(row[c]) for c in red_cols]
+            metrics = calculate_metrics(reds, config.red_range[1])
+            
+            sums.append(metrics['sum'])
+            spans.append(metrics['span'])
+            
+            road_counts[0] += metrics['012'][0]
+            road_counts[1] += metrics['012'][1]
+            road_counts[2] += metrics['012'][2]
+            
+            odd_counts += metrics['odd_even'][0]
+            even_counts += metrics['odd_even'][1]
+            
+        trends['avg_sum'] = sum(sums) / len(sums)
+        trends['avg_span'] = sum(spans) / len(spans)
+        
+        # Determine hot road
+        max_road = max(road_counts)
+        trends['hot_road'] = road_counts.index(max_road)
+        
+        # Determine hot odd/even
+        trends['hot_odd_even'] = 'odd' if odd_counts > even_counts else 'even'
+        
+        return trends
+
 
 def check_consecutive(numbers: list) -> int:
     sorted_nums = sorted(numbers)
@@ -143,6 +229,9 @@ class Predictor:
         red_omission = calculate_omission(history_df, config.red_range[1], 'red')
         blue_omission = calculate_omission(history_df, config.blue_range[1], 'blue')
         
+        # 3. Trend Analysis (Auto-Tune Logic)
+        trends = AnalysisUtils.analyze_recent_trends(history_df, game_type)
+        
         # Calculate Weights
         red_pop = list(range(config.red_range[0], config.red_range[1] + 1))
         blue_pop = list(range(config.blue_range[0], config.blue_range[1] + 1))
@@ -178,17 +267,26 @@ class Predictor:
                 # Boost if Repeat (Trend)
                 if is_repeat:
                     weight *= 2.5 # Increased repeat weight
+                
+                # Boost based on Hot Road (012)
+                if n % 3 == trends['hot_road']:
+                    weight *= 1.2
+                
+                # Boost based on Hot Odd/Even
+                is_odd = n % 2 != 0
+                if (trends['hot_odd_even'] == 'odd' and is_odd) or \
+                   (trends['hot_odd_even'] == 'even' and not is_odd):
+                    weight *= 1.2
             
             return weight
 
         red_weights = [get_weight(n, red_counts, red_omission, n in last_reds, is_blue=False) for n in red_pop]
         blue_weights = [get_weight(n, blue_counts, blue_omission, is_blue=True) for n in blue_pop]
         
-        # Define Sum Range
-        if game_type == GameType.SSQ:
-            target_min, target_max = 80, 130 
-        else:
-            target_min, target_max = 60, 120
+        # Define Sum Range (Dynamic based on trend)
+        avg_sum = trends['avg_sum']
+        target_min = int(avg_sum * 0.8)
+        target_max = int(avg_sum * 1.2)
             
         # Retry loop for filtering
         for _ in range(2000): 

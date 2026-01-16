@@ -12,3 +12,13 @@ services:
     restart: always
     environment:
       - TZ=Asia/Shanghai
+
+  lottery-scheduler:
+    build: .
+    container_name: lottery-scheduler
+    command: python scheduler.py
+    volumes:
+      - ./data:/app/data
+    restart: always
+    environment:
+      - TZ=Asia/Shanghai

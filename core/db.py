@@ -41,10 +41,33 @@ class Database:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        # Users Table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                username TEXT PRIMARY KEY,
+                password_hash TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
         self.conn.commit()
 
     def close(self):
         self.conn.close()
+
+    # --- User Management ---
+    def create_user(self, username, password_hash):
+        cursor = self.conn.cursor()
+        try:
+            cursor.execute('INSERT INTO users (username, password_hash) VALUES (?, ?)', (username, password_hash))
+            self.conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+    def get_user(self, username):
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM users WHERE username = ?', (username,))
+        return cursor.fetchone()
 
     # --- Daily Recommendations ---
     
